@@ -10,14 +10,14 @@ cd "$(dirname "$0")"
 getent passwd flo >/dev/null || { echo "Benutzer flo fehlt – User= in systemd/*.service anpassen." >&2; exit 1; }
 id -nG flo | grep -qw video || { echo "Benutzer flo ist nicht in der Gruppe video." >&2; exit 1; }
 
-sudo apt-get install -y rpicam-apps rsync
+sudo apt-get install -y rpicam-apps rsync curl
 
 sudo install -m 0755 -o root -g root bin/morgenfoto /usr/local/bin/morgenfoto
 sudo install -m 0644 -o root -g root systemd/morgenfoto.service systemd/morgenfoto.timer \
     systemd/kamera-stream.service /etc/systemd/system/
 if [ ! -e /etc/morgenfoto.conf ]; then
     sudo install -m 0644 -o root -g root config/morgenfoto.conf.example /etc/morgenfoto.conf
-    echo "/etc/morgenfoto.conf angelegt – RSYNC_TARGET und PHOTO_OPTS anpassen (siehe README)."
+    echo "/etc/morgenfoto.conf angelegt – RSYNC_TARGET, PHOTO_OPTS und LIGHT_URL anpassen (siehe README)."
 fi
 
 # Der Pi 3 hat keine Echtzeituhr: Ohne diesen Dienst starten Timer vor der

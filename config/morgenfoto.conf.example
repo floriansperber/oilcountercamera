@@ -24,4 +24,12 @@ RPICAM_OPTS=
 # --roi x,y,breite,höhe als Anteil des ganzen Sensorbilds (4608x2592);
 # --width/--height = Ausschnittgröße in Pixeln, damit nichts skaliert wird.
 # Leer = ganzes Bild in Qualität 93.
-PHOTO_OPTS="--roi 0.2274,0.5208,0.4375,0.3210 --width 2016 --height 832 --quality 80"
+PHOTO_OPTS="--roi 0.2467,0.4730,0.4375,0.3210 --width 2016 --height 832 --quality 80"
+
+# Licht für die Aufnahme über eine Shelly-Steckdose (Gen2/Gen3-API), z. B.
+# "http://shellyplugsg3-xxxxxxxxxxxx.lan". Leer = Licht nicht schalten.
+# War das Licht schon an, bleibt es nach der Aufnahme an.
+LIGHT_URL=
+
+# Sekunden zwischen Licht an und Aufnahme.
+LIGHT_WARMUP=2

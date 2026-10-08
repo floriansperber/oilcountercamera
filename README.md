@@ -2,8 +2,9 @@
 
 Ein Raspberry Pi fotografiert einmal täglich das Rollenzählwerk eines Heizöl-Zählers und überträgt das Foto per rsync über SSH an ein Zielsystem, das den Zählerstand ausliest.
 
-- Aufnahme täglich um **10:00** (systemd-Timer), damit Tageslicht da ist
-- Zuschnitt direkt in der Kamera auf das Zählwerk: ~120 KB statt ~1,1 MB pro Foto
+- Aufnahme täglich um **10:00** (systemd-Timer)
+- Licht über eine Shelly-Steckdose, nur während der Aufnahme
+- Zuschnitt direkt in der Kamera auf das Zählwerk: ~150 KB statt ~1,1 MB pro Foto
 - Jedes Foto wird **genau einmal** übertragen; was wegen eines Fehlers nicht ankommt, wird beim nächsten Lauf nachgeholt
 - Livestream auf Abruf (VLC) zum Ausrichten der Kamera
 
@@ -15,7 +16,7 @@ Die Namen `morgenfoto` und `kamera-stream` stammen aus der ersten Version (Aufna
 |---|---|
 | Raspberry Pi 3 Model B | 15-poliger Kameraanschluss; das Kabel der Kamera passt direkt. Pi 5 und Zero brauchen ein 22-poliges Adapterkabel. |
 | Raspberry Pi Camera Module 3 (12 MP, Sensor IMX708) | Kabel nur stromlos stecken, beim Pi 3 zeigen die Kontakte zum HDMI-Anschluss. |
-| Licht | Ohne Licht ist das Foto schwarz und der Autofokus findet nichts. Gemessen: 0,4 Lux bei ausgeschaltetem Licht, ~60 Lux mit Raumlicht. |
+| Lampe an einer Shelly-Steckdose (getestet: Shelly Plug S Gen3) | Ohne Licht ist das Foto schwarz und der Autofokus findet nichts. Gemessen am Zähler: 0,4 Lux ohne Licht, 60–260 Lux mit Lampe. Siehe [Licht](#licht). |
 
 Die Kamera stellt ab etwa 8–10 cm scharf. Liegt sie zu nah am Zähler, bleibt das Objektiv am Nahanschlag (`LensPosition` 12) und die Ziffern werden weich.
 
@@ -32,7 +33,7 @@ rpicam-still --list-cameras      # erwartet: 0 : imx708 [4608x2592 ...]
 | Im Repo | Auf dem Pi | Zweck |
 |---|---|---|
 | `bin/morgenfoto` | `/usr/local/bin/morgenfoto` | Foto aufnehmen, übertragen, lokal aufräumen |
-| `config/morgenfoto.conf.example` | `/etc/morgenfoto.conf` | Einstellungen: Ziel, SSH-Schlüssel, Ausschnitt, Aufbewahrung |
+| `config/morgenfoto.conf.example` | `/etc/morgenfoto.conf` | Einstellungen: Ziel, SSH-Schlüssel, Ausschnitt, Licht, Aufbewahrung |
 | `systemd/morgenfoto.service` | `/etc/systemd/system/` | führt das Skript einmal als Benutzer `flo` aus |
 | `systemd/morgenfoto.timer` | `/etc/systemd/system/` | startet den Dienst täglich um 10:00 |
 | `systemd/kamera-stream.service` | `/etc/systemd/system/` | Livestream zum Ausrichten, nur auf Abruf |
@@ -56,7 +57,7 @@ Laufzeitdaten auf dem Pi:
    ```
    Die Units laufen als Benutzer `flo`. Wer einen anderen Benutzer verwendet, passt `User=`/`Group=` in `systemd/*.service` und `SSH_KEY` in der Konfiguration an.
 3. Kamera ausrichten (siehe [Livestream](#livestream)) und den [Bildausschnitt bestimmen](#bildausschnitt-bestimmen).
-4. [Zielsystem einrichten](#zielsystem) und `RSYNC_TARGET` in `/etc/morgenfoto.conf` eintragen.
+4. [Zielsystem einrichten](#zielsystem) und `RSYNC_TARGET` in `/etc/morgenfoto.conf` eintragen, ebenso `LIGHT_URL` für das [Licht](#licht).
 5. Testlauf:
    ```bash
    sudo systemctl start morgenfoto.service
@@ -87,6 +88,29 @@ Das Zielsystem holt die Fotos aus dem Eingangsordner ab und verschiebt sie nach 
 1. Vor der Übertragung bekommt jedes noch nicht gesendete Foto einen **Hardlink** in `gesendet/`. Das ist ein zweiter Name für dieselbe Datei und kostet keinen Platz.
 2. `rsync --remove-source-files` entfernt jedes Foto erst nach **seiner** erfolgreichen Übertragung aus dem Hauptordner. Was nicht ankommt, bleibt dort und geht beim nächsten Lauf mit.
 3. rsync schreibt auf dem Ziel zuerst in eine versteckte Temp-Datei (`.name.XXXXXX`) und benennt sie am Ende um. Ein Programm, das den Ordner überwacht und versteckte Dateien ignoriert, sieht daher nie ein halbes Foto.
+
+## Licht
+
+Das Skript schaltet vor der Aufnahme eine Lampe über die lokale HTTP-API einer Shelly-Steckdose (Gen2/Gen3) ein und danach wieder aus. In `/etc/morgenfoto.conf`:
+
+```bash
+LIGHT_URL=http://shellyplugsg3-xxxxxxxxxxxx.lan   # leer = Licht nicht schalten
+LIGHT_WARMUP=2                                    # Sekunden zwischen Licht an und Aufnahme
+```
+
+- **Hostname statt IP:** Die Steckdose bezieht ihre IPv4-Adresse per DHCP. Unter ihrem Namen (`shellyplug…` plus lokale Domain, z. B. `.lan` oder `.fritz.box`) bleibt sie auch nach einem Adresswechsel erreichbar.
+- **Zustand wird respektiert:** Brennt das Licht schon (jemand ist im Raum), schaltet das Skript es weder ein noch aus.
+- **Sicherheitsnetz:** Eingeschaltet wird mit `Switch.Set?id=0&on=true&toggle_after=120`, die Steckdose schaltet also spätestens nach 120 s selbst ab, auch wenn das Skript abbricht. Das reguläre Ausschalten erledigt ein `trap` beim Skriptende.
+- **Steckdose nicht erreichbar:** Es gibt eine Warnung im Journal, fotografiert wird trotzdem.
+- Die Lampe schräg von der Seite auf das Zählwerk richten, sonst spiegelt sie sich in der gewölbten Abdeckung über den Ziffern.
+
+Prüfen, ob der Pi die Steckdose erreicht:
+
+```bash
+curl "$LIGHT_URL/rpc/Switch.GetStatus?id=0"     # "output":true/false
+```
+
+Für den Livestream oder das Kalibrieren des Ausschnitts wird das Licht nicht automatisch geschaltet; dafür die Lampe per Shelly-App oder Weboberfläche einschalten.
 
 ## Livestream
 

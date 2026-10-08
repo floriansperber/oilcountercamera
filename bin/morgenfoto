@@ -10,11 +10,34 @@ SSH_KEY=/home/flo/.ssh/morgenfoto_ed25519
 KEEP_DAYS=30
 RPICAM_OPTS=
 PHOTO_OPTS=
+LIGHT_URL=
+LIGHT_WARMUP=2
 CONF=${MORGENFOTO_CONF:-/etc/morgenfoto.conf}
 [ -r "$CONF" ] && . "$CONF"
 
 mkdir -p "$PHOTO_DIR"
 photo="$PHOTO_DIR/$(date +%F_%H%M).jpg"
+
+# Licht über eine Shelly-Steckdose (Gen2/Gen3-API) für die Aufnahme einschalten.
+# War es schon an, bleibt es unangetastet. Ist die Steckdose nicht erreichbar,
+# wird trotzdem fotografiert.
+light() { curl -fsS --max-time 5 "$LIGHT_URL/rpc/Switch.$1" >/dev/null; }
+light_on_re='"output": *true'
+if [ -n "$LIGHT_URL" ]; then
+    if ! status=$(curl -fsS --max-time 5 "$LIGHT_URL/rpc/Switch.GetStatus?id=0"); then
+        echo "Warnung: Licht unter $LIGHT_URL nicht erreichbar – Aufnahme ohne Licht." >&2
+    elif [[ $status =~ $light_on_re ]]; then
+        echo "Licht war schon an und bleibt an."
+    # toggle_after: Die Steckdose schaltet nach 120 s selbst wieder ab,
+    # auch wenn dieses Skript vorher abbricht.
+    elif light "Set?id=0&on=true&toggle_after=120"; then
+        trap 'light "Set?id=0&on=false" && echo "Licht ausgeschaltet." || echo "Warnung: Licht nicht ausgeschaltet (schaltet nach 120 s selbst ab)." >&2' EXIT
+        echo "Licht eingeschaltet."
+        sleep "$LIGHT_WARMUP"
+    else
+        echo "Warnung: Licht unter $LIGHT_URL ließ sich nicht einschalten." >&2
+    fi
+fi
 
 # Aufnahme zuerst in eine .part-Datei, damit ein Abbruch kein halbes Foto
 # hinterlässt, das danach synchronisiert würde.
