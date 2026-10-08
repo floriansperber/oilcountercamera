@@ -1,0 +1,22 @@
+[Unit]
+Description=Live-Videostream der Kamera zum Ausrichten (H.264 über TCP, Port 8888)
+# Die Kamera kann nur ein Programm gleichzeitig nutzen: Startet der Timer
+# morgenfoto.service, beendet systemd vorher den Stream.
+Conflicts=morgenfoto.service
+Before=morgenfoto.service
+
+[Service]
+User=flo
+Group=flo
+# Für RPICAM_OPTS (z. B. --rotation 180), damit der Stream wie das Foto aussieht.
+EnvironmentFile=-/etc/morgenfoto.conf
+# --mode 2304:1296: ganzer Sensor, also derselbe Bildausschnitt wie das Foto.
+# --inline: Codec-Header vor jedem Keyframe, damit VLC jederzeit einsteigen kann.
+# --listen: wartet auf einen Zuschauer und beendet sich, wenn er trennt.
+ExecStart=/usr/bin/rpicam-vid -n -t 0 --inline --listen \
+    --mode 2304:1296:10:P --width 1280 --height 720 --framerate 25 \
+    --bitrate 4000000 --autofocus-mode continuous $RPICAM_OPTS \
+    -o tcp://0.0.0.0:8888
+# Nach jedem Zuschauer sofort wieder auf den nächsten warten.
+Restart=always
+RestartSec=1

@@ -1,0 +1,12 @@
+[Unit]
+Description=Täglich um 10:00 ein Foto vom Ölzähler
+
+[Timer]
+OnCalendar=*-*-* 10:00:00
+# Ohne diese Angabe darf systemd bis zu einer Minute später starten.
+AccuracySec=1s
+# Bewusst kein Persistent=true: War der Pi um 10:00 aus, wird das Foto
+# nicht beim nächsten Hochfahren zu einer beliebigen Uhrzeit nachgeholt.
+
+[Install]
+WantedBy=timers.target

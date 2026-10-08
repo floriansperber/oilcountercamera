@@ -1,0 +1,27 @@
+# Einstellungen für /usr/local/bin/morgenfoto
+
+# Ablage der Fotos auf dem Pi: noch nicht übertragene direkt im Ordner,
+# übertragene im Unterordner gesendet/.
+PHOTO_DIR=/var/lib/morgenfoto
+
+# Ziel für rsync über SSH, z. B. "benutzer@zielserver:/pfad/zum/eingang/".
+# Leer = Fotos bleiben nur auf dem Pi.
+RSYNC_TARGET=
+
+# SSH-Schlüssel für das Zielsystem; der öffentliche Teil liegt in $SSH_KEY.pub.
+SSH_KEY=/home/flo/.ssh/id_ed25519
+
+# Übertragene Fotos in gesendet/ werden nach so vielen Tagen gelöscht.
+KEEP_DAYS=30
+
+# Zusätzliche Kamera-Optionen, z. B. "--rotation 180" bei kopfüber montierter
+# Kamera. Sie gelten für das Foto (rpicam-still) und für den Videostream
+# (rpicam-vid), daher nur Optionen verwenden, die beide Programme kennen.
+RPICAM_OPTS=
+
+# Nur für das Foto: Ausschnitt aufs Zählwerk und JPEG-Qualität. Die Werte
+# hängen von der Montage der Kamera ab – siehe README, "Bildausschnitt bestimmen".
+# --roi x,y,breite,höhe als Anteil des ganzen Sensorbilds (4608x2592);
+# --width/--height = Ausschnittgröße in Pixeln, damit nichts skaliert wird.
+# Leer = ganzes Bild in Qualität 93.
+PHOTO_OPTS="--roi 0.2274,0.5208,0.4375,0.3210 --width 2016 --height 832 --quality 80"

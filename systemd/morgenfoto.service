@@ -1,0 +1,12 @@
+[Unit]
+Description=Morgenfoto aufnehmen und per rsync übertragen
+Wants=network-online.target
+After=network-online.target time-sync.target
+
+[Service]
+Type=oneshot
+User=flo
+Group=flo
+StateDirectory=morgenfoto
+ExecStart=/usr/local/bin/morgenfoto
+TimeoutStartSec=10min

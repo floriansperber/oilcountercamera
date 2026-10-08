@@ -1,0 +1,53 @@
+#!/bin/bash
+# morgenfoto – nimmt ein Foto mit der Raspberry-Pi-Kamera auf und kopiert
+# anschließend alle Fotos per rsync über SSH auf das Zielsystem.
+# Wird täglich von morgenfoto.timer gestartet, Einstellungen in /etc/morgenfoto.conf.
+set -euo pipefail
+
+PHOTO_DIR=/var/lib/morgenfoto
+RSYNC_TARGET=
+SSH_KEY=/home/flo/.ssh/morgenfoto_ed25519
+KEEP_DAYS=30
+RPICAM_OPTS=
+PHOTO_OPTS=
+CONF=${MORGENFOTO_CONF:-/etc/morgenfoto.conf}
+[ -r "$CONF" ] && . "$CONF"
+
+mkdir -p "$PHOTO_DIR"
+photo="$PHOTO_DIR/$(date +%F_%H%M).jpg"
+
+# Aufnahme zuerst in eine .part-Datei, damit ein Abbruch kein halbes Foto
+# hinterlässt, das danach synchronisiert würde.
+# -t 3000: drei Sekunden für Belichtung, Weißabgleich und Autofokus.
+# shellcheck disable=SC2086  # RPICAM_OPTS/PHOTO_OPTS sollen in einzelne Optionen zerfallen
+if ! rpicam-still -n -t 3000 --autofocus-on-capture -e jpg $RPICAM_OPTS $PHOTO_OPTS -o "$photo.part"; then
+    rm -f "$photo.part"
+    echo "Aufnahme fehlgeschlagen – ist die Kamera angeschlossen? (rpicam-still --list-cameras)" >&2
+    exit 1
+fi
+mv "$photo.part" "$photo"
+echo "Foto gespeichert: $photo"
+
+if [ -z "$RSYNC_TARGET" ]; then
+    echo "RSYNC_TARGET ist leer – Foto bleibt nur lokal."
+    exit 0
+fi
+
+# Jedes Foto wird genau einmal übertragen: Das Ziel verarbeitet die Dateien
+# und räumt sie danach weg, erneutes Kopieren würde sie doppelt einliefern.
+# Im Hauptordner liegen nur noch nicht übertragene Fotos; was wegen eines
+# Fehlers dort bleibt, geht beim nächsten Lauf mit.
+shopt -s nullglob
+pending=("$PHOTO_DIR"/*.jpg)
+mkdir -p "$PHOTO_DIR/gesendet"
+# Lokale Kopie als Hardlink in gesendet/ – kostet keinen Platz.
+ln -f "${pending[@]}" "$PHOTO_DIR/gesendet/"
+# --remove-source-files entfernt jedes Foto erst nach seiner erfolgreichen
+# Übertragung aus dem Hauptordner.
+rsync -a --remove-source-files \
+    -e "ssh -i $SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30" \
+    "${pending[@]}" "$RSYNC_TARGET"
+echo "Übertragen nach $RSYNC_TARGET: ${pending[*]##*/}"
+
+# Lokale Kopien übertragener Fotos nach KEEP_DAYS Tagen löschen.
+find "$PHOTO_DIR/gesendet" -name '*.jpg' -mtime +"$KEEP_DAYS" -delete
