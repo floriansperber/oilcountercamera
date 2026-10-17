@@ -2,7 +2,7 @@
 
 Ein Raspberry Pi fotografiert einmal täglich das Rollenzählwerk eines Heizöl-Zählers und überträgt das Foto per rsync über SSH an ein Zielsystem, das den Zählerstand ausliest.
 
-- Aufnahme täglich um **10:00** (systemd-Timer)
+- Aufnahme täglich um **23:59** (systemd-Timer), damit die Differenz zweier Fotos der Verbrauch eines Kalendertags ist
 - Licht über eine Shelly-Steckdose, nur während der Aufnahme
 - Zuschnitt direkt in der Kamera auf das Zählwerk: ~150 KB statt ~1,1 MB pro Foto
 - Jedes Foto wird **genau einmal** übertragen; was wegen eines Fehlers nicht ankommt, wird beim nächsten Lauf nachgeholt
@@ -35,7 +35,7 @@ rpicam-still --list-cameras      # erwartet: 0 : imx708 [4608x2592 ...]
 | `bin/morgenfoto` | `/usr/local/bin/morgenfoto` | Foto aufnehmen, übertragen, lokal aufräumen |
 | `config/morgenfoto.conf.example` | `/etc/morgenfoto.conf` | Einstellungen: Ziel, SSH-Schlüssel, Ausschnitt, Licht, Aufbewahrung |
 | `systemd/morgenfoto.service` | `/etc/systemd/system/` | führt das Skript einmal als Benutzer `flo` aus |
-| `systemd/morgenfoto.timer` | `/etc/systemd/system/` | startet den Dienst täglich um 10:00 |
+| `systemd/morgenfoto.timer` | `/etc/systemd/system/` | startet den Dienst täglich um 23:59 |
 | `systemd/kamera-stream.service` | `/etc/systemd/system/` | Livestream zum Ausrichten, nur auf Abruf |
 | `install.sh` | – | installiert alles oben Genannte |
 
@@ -166,4 +166,6 @@ Uhrzeit ändern: `OnCalendar=` in `/etc/systemd/system/morgenfoto.timer`, danach
 
 - **Keine Echtzeituhr:** Der Pi 3 bootet mit der Uhrzeit des letzten Herunterfahrens. Springt die Uhr durch NTP über die Aufnahmezeit, startet der Timer sofort. `install.sh` aktiviert deshalb `systemd-time-wait-sync.service`, das Timer bis zur Synchronisation zurückhält.
 - **Kein `Persistent=true` im Timer:** War der Pi zur Aufnahmezeit aus, wird das Foto bewusst nicht beim Hochfahren zu einer beliebigen Uhrzeit nachgeholt.
+- **Uhrzeit ändern kann sofort ein Foto auslösen:** systemd rechnet den nächsten Termin ab dem *letzten Lauf*, auch ohne `Persistent=true`. Liegt die neue Uhrzeit seit dem letzten Lauf schon in der Vergangenheit, startet der Dienst beim `daemon-reload` sofort, und das Foto geht ans Ziel. Passiert beim Wechsel von 10:00 auf 23:59 am Morgen nach dem letzten 10:00-Lauf (ohne Licht, schwarzes Bild). Gefahrlos ist die Änderung direkt nach einem Lauf, solange die neue Uhrzeit an diesem Tag noch bevorsteht.
+- **Licht per IP statt Namen, wenn die Steckdose eine feste DHCP-Zuordnung hat:** Mit fester Zuordnung im Pi-hole entfällt der automatische `.lan`-Name aus der DHCP-Vergabe. `LIGHT_URL` dann auf die IP setzen, sonst läuft die Aufnahme ohne Licht.
 - **Fehlerhafte Läufe** enden mit Exit-Code ≠ 0; der Dienst steht dann in `systemctl --failed`, die Fotos bleiben erhalten.
